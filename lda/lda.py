@@ -133,6 +133,7 @@ def main():
         numpy.random.seed(options.seed)
 
     voca = vocabulary.Vocabulary(options.stopwords)
+    print(corpus)
     docs = [voca.doc_to_ids(doc) for doc in corpus]
     if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
 
