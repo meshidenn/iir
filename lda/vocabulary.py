@@ -21,6 +21,7 @@ def load_corpus(ranges):
         from nltk.corpus import brown as corpus
         return [corpus.words(fileid) for fileid in corpus.fileids()[start:end]]
 
+
 def load_file(filename):
     """
     for one file
@@ -34,6 +35,7 @@ def load_file(filename):
             corpus.append(doc)
     f.close()
     return corpus
+
 
 def load_file_ja(dirname):
     """
@@ -69,13 +71,17 @@ stopwords_list = "a,s,able,about,above,according,accordingly,across,actually,aft
 recover_list = {"wa":"was", "ha":"has"}
 wl = nltk.WordNetLemmatizer()
 
+
 def is_stopword(w):
     return w in stopwords_list
+
+
 def lemmatize(w0):
     w = wl.lemmatize(w0.lower())
     # if w=='de': print w0, w
     if w in recover_list: return recover_list[w]
     return w
+
 
 class Vocabulary:
     def __init__(self, excluds_stopwords=False):
@@ -98,10 +104,10 @@ class Vocabulary:
         return voca_id
 
     def doc_to_ids(self, doc):
-        #print ' '.join(doc)
+        # print ' '.join(doc)
         list = []
         words = dict()
-        print(doc)
+        # print(doc)
         for term in doc:
             id = self.term_to_id(term)
             if id != None:
@@ -111,7 +117,7 @@ class Vocabulary:
                     self.docfreq[id] += 1
         if "close" in dir(doc): doc.close()
         return list
-
+    
     def cut_low_freq(self, corpus, threshold=1):
         new_vocas = []
         new_docfreq = []

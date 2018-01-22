@@ -24,14 +24,16 @@ def main1(args):
 
     print(sentences)
 
+
 def main2(args):
     infile = args.input
     outfile = args.output
 
     sentences = []
     with open(infile, 'r', encoding='utf-8') as f:
-        for i,line in enumerate(f):
+        for i, line in enumerate(f):
             m = MeCab.Tagger("-Ochasen")
+            m.parse("")
             node = m.parseToNode(line)
             print(i)
             sentence = []
@@ -39,12 +41,12 @@ def main2(args):
                 if (node.surface != ''):
                     sentence.append(node.surface)
                 node = node.next
-                    
+
             sentences.append(sentence)
 
     print(sentences)
-    
-                
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='input argument')
     parser.add_argument("--input", '-i', help='input file pass')

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+# !/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 # Pachinko Allocation Model + collapsed Gibbs sampling
@@ -14,7 +14,7 @@ class PAM:
         self.S = S  # super topic num
         self.K = K  # sub topic num
         self.alphas = np.ones(S) * alphas  # parameter of super-topic prior
-        self.alphask = np.ones(S, K) * alphas / K  # parameter of sub-topic prior
+        self.alphask = np.ones((S, K)) * alphas / K  # parameter of sub-topic prior
         self.beta = np.ones(K) * beta   # parameter of words prior
         self.docs = docs  # matrix of each word id for each docs
         self.V = V  # Number of all vocaburary
@@ -28,7 +28,7 @@ class PAM:
         self.n_m_zs = np.zeros((len(self.docs), S))
         self.n_m_zk = np.zeros((len(self.docs), S, K))
         # count of each topic and vocabulary
-        self.n_zk_t = np.zeros((K, V))
+        self.n_zk_t = np.zeros((K, V)) + beta
         # topic count of each topic
         self.n_zk = np.zeros(K) + V * beta
         self.N = len(docs)
@@ -48,13 +48,14 @@ class PAM:
                     p_zsk = p_s * p_k * p_v
                     """
                     n_k = self.n_m_zk + self.alphask
-                    n_v = self.n_zk_t[t] + self.beta
-                    p_zsk = n_k * n_v /
+                    n_v = self.n_zk_t[:, t]
+                    p_zsk = n_k * n_v / \
                             (len(self.docs[m]) + np.sum(self.alphas)) \
                             / self.n_zk
 
                     p_zs = np.sum(p_zsk, axis=1)
                     p_zk = np.sum(p_zsk, axis=0)
+                    print(p_zsk.shape, p_zs.shape, p_zk.shape)
 
                     zs = np.random.multinomial(1, p_zs).argmax()
                     zk = np.random.multinomial(1, p_zk).argmax()
@@ -102,7 +103,7 @@ class PAM:
                 """
 
                 n_k = n_m_zk + self.alphask
-                n_v = self.n_zk_t[t] + self.beta
+                n_v = self.n_zk_t[t]
                 p_zsk = n_k * n_v \
                         / (len(self.docs[m])+np.sum(self.alphas)) \
                         / self.n_zk
@@ -146,12 +147,11 @@ class PAM:
             theta = np.dot(thetas, thetask)
             """
             theta = np.sum((self.n_m_zk[m] + self.alphask) /
-                    (len(self.docs[m]) + np.sum(self.alphas), axis = 0)
+                    (len(self.docs[m]) + np.sum(self.alphas)), axis=0)
             for w in doc:
                 log_per -= np.log(np.dot(theta, phi[:, w]))
             N += len(doc)
         return np.exp(log_per / N)
-
 
 
 def pam_learning(pam, iteration, voca, hp):
@@ -214,7 +214,7 @@ def main():
     parser.add_option("-i", dest="iteration",
                       type="int", help="iteration \
                       count", default=100)
-    parser.add_option("-si", dest="smartinit",
+    parser.add_option("--si", dest="smartinit",
                       action="store_true", help="smart\
                       initialize of parameters",
                       default=False)
@@ -230,7 +230,7 @@ def main():
     parser.add_option("--df", dest="df", type="int",
                       help="threshold of document \
                       freaquency to cut words", default=0)
-    parser.add_option("-hp", dest="hp", action='store_true',
+    parser.add_option("--hpi", dest="hpi", action='store_true',
                       help="hyper parameter inference")
     (options, args) = parser.parse_args()
     if not (options.dirname or options.filename or options.corpus):
@@ -248,11 +248,12 @@ def main():
         np.random.seed(options.seed)
 
     voca = vocabulary.Vocabulary(options.stopwords)
-    print(corpus)
+    # print(corpus)
     docs = [voca.doc_to_ids(doc) for doc in corpus]
     if options.df > 0:
         docs = voca.cut_low_freq(docs, options.df)
 
+    print(options.S, options.K, options.alphas, options.beta)
     pam = PAM(options.S, options.K, options.alphas, options.beta,
               docs, voca.size(), options.smartinit)
     print("corpus=%d, words=%d, K=%d, a=%f, b=%f"
