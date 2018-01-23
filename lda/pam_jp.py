@@ -47,14 +47,15 @@ class PAM:
                     p_v = n_v / (self.n_zk + self.beta)
                     p_zsk = p_s * p_k * p_v
                     """
-                    n_k = self.n_m_zk + self.alphask
+                    n_sk = self.n_m_zk[m] + self.alphask
                     n_v = self.n_zk_t[:, t]
-                    p_zsk = n_k * n_v / \
+                    p_zsk = n_sk * n_v / \
                             (len(self.docs[m]) + np.sum(self.alphas)) \
                             / self.n_zk
 
                     p_zs = np.sum(p_zsk, axis=1)
                     p_zk = np.sum(p_zsk, axis=0)
+                    print(n_sk.shape, n_v.shape)
                     print(p_zsk.shape, p_zs.shape, p_zk.shape)
 
                     zs = np.random.multinomial(1, p_zs).argmax()
@@ -101,10 +102,9 @@ class PAM:
                 p_v = n_v / (self.n_zk + self.beta)
                 p_zsk = p_s * p_k * p_v  # SxK matrix
                 """
-
-                n_k = n_m_zk + self.alphask
+                n_sk = n_m_zk[m] + self.alphask
                 n_v = self.n_zk_t[t]
-                p_zsk = n_k * n_v \
+                p_zsk = n_sk * n_v \
                         / (len(self.docs[m])+np.sum(self.alphas)) \
                         / self.n_zk
                 p_zs = np.sum(p_zsk, axis=1)
@@ -170,22 +170,30 @@ def pam_learning(pam, iteration, voca, hp):
             else:
                 pre_perp = perp
     output_word_topic_dist(pam, voca)
+    output_super_sub_topic_dist(pam)
+
+
+def output_super_sub_topic_dist(pam):
+    zsk = np.average(pam.zk_m_j, axis=0)
+    for s in range(pam.S):
+        p_zsk = zsk[s] / np.sum(zsk[s])
+        print("super_topic-{}:{}".format(s+1, ','.join(p_zsk)))
 
 
 def output_word_topic_dist(pam, voca):
-    zcount = np.zeros(pam.K, dtype=int)
+    zkcount = np.zeros(pam.K, dtype=int)
     wordcount = [dict() for k in range(pam.K)]
-    for xlist, zlist in zip(pam.docs, pam.z_m_n):
-        for x, z in zip(xlist, zlist):
-            zcount[z] += 1
-            if x in wordcount[z]:
-                wordcount[z][x] += 1
+    for xlist, zklist in zip(pam.docs, pam.zk_m_j):
+        for x, zk in zip(xlist, zklist):
+            zkcount[zk] += 1
+            if x in wordcount[zk]:
+                wordcount[zk][x] += 1
             else:
-                wordcount[z][x] = 1
+                wordcount[zk][x] = 1
 
     phi = pam.worddist()
     for k in range(pam.K):
-        print("\n-- topic: %d (%d words)" % (k, zcount[k]))
+        print("\n-- topic: %d (%d words)" % (k, zkcount[k]))
         for w in np.argsort(-phi[k])[:20]:
             print("%s: %f (%d)" % (voca[w], phi[k, w], wordcount[k].get(w, 0)))
 
