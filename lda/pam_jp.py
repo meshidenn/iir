@@ -104,11 +104,10 @@ class PAM:
                 """
                 n_sk = n_m_zk[m] + self.alphask
                 n_v = self.n_zk_t[t]
-                p_zsk = n_sk * n_v \
-                        / (len(self.docs[m])+np.sum(self.alphas)) \
-                        / self.n_zk
-                p_zs = np.sum(p_zsk, axis=1)
-                p_zk = np.sum(p_zsk, axis=0)
+                n_zsk = n_sk * n_v
+                denom = np.sum(n_zsk)
+                p_zs = np.sum(n_zsk, axis=1) / denom
+                p_zk = np.sum(n_zsk, axis=0) / denom
 
                 new_zs = np.random.multinomial(1, p_zs).argmax()
                 new_zk = np.random.multinomial(1, p_zk).argmax()
