@@ -100,6 +100,7 @@ class PAM:
                 p_k = n_k / n_s.reshape(len(n_s), 1)
                 n_v = self.n_zk_t[:, t] + self.beta
                 p_v = n_v / (self.n_zk + self.beta)
+
                 p_zsk = p_s.reshape(len(p_s), 1) * p_k * p_v  # SxK matrix
 
                 p_zs = np.sum(p_zsk, axis=1) / np.sum(p_zsk)
