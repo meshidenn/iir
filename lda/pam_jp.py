@@ -32,6 +32,7 @@ class PAM:
         # topic count of each topic
         self.n_zk = np.zeros(K) + V * beta
         self.N = len(docs)
+        print(self.alphask)
         for m, doc in enumerate(docs):
             self.N += len(doc)  # all word
             zs_j = []  # super-topic of jth word in mth doc
@@ -47,19 +48,19 @@ class PAM:
                     p_v = n_v / (self.n_zk + self.beta)
                     p_zsk = p_s * p_k * p_v
                     """
-                    n_sk = self.n_m_zk[m] + self.alphask
+                    n_sk = self.alphask
                     n_v = self.n_zk_t[:, t]
-                    p_zsk = n_sk * n_v / \
-                            (len(self.docs[m]) + np.sum(self.alphas)) \
+                    p_zsk = n_sk * n_v  \
+                            / np.sum(self.alphas) \
                             / self.n_zk
 
                     p_zs = np.sum(p_zsk, axis=1)
                     p_zk = np.sum(p_zsk, axis=0)
-                    print(n_sk.shape, n_v.shape)
-                    print(p_zsk.shape, p_zs.shape, p_zk.shape)
+                    print(p_zs, p_zk)
 
                     zs = np.random.multinomial(1, p_zs).argmax()
                     zk = np.random.multinomial(1, p_zk).argmax()
+                    print(zs, zk)
 
                 else:
                     zs = np.random.randint(0, S)
@@ -88,30 +89,31 @@ class PAM:
                 zs = zs_j[j]
                 zk = zk_j[j]
                 n_m_zs[zs] -= 1
-                n_m_zk[zk] -= 1
+                n_m_zk[zs, zk] -= 1
                 self.n_zk_t[zk, t] -= 1
-                self.n_z[zk] -= 1
+                self.n_zk[zk] -= 1
 
                 # sampling topic new_z for t
-                """
                 n_s = n_m_zs + self.alphas   # mth doc, S vec
                 p_s = n_s / np.sum(n_s)
                 n_k = n_m_zk + self.alphask  # mth doc, SxK matrix
-                p_k = n_k / n_s
+                p_k = n_k / n_s.reshape(len(n_s), 1)
                 n_v = self.n_zk_t[:, t] + self.beta
                 p_v = n_v / (self.n_zk + self.beta)
-                p_zsk = p_s * p_k * p_v  # SxK matrix
-                """
-                n_sk = n_m_zk[m] + self.alphask
-                n_v = self.n_zk_t[t]
-                p_zsk = n_sk * n_v \
-                        / (len(self.docs[m])+np.sum(self.alphas)) \
-                        / self.n_zk
-                p_zs = np.sum(p_zsk, axis=1)
-                p_zk = np.sum(p_zsk, axis=0)
+                p_zsk = p_s.reshape(len(p_s), 1) * p_k * p_v  # SxK matrix
 
+                p_zs = np.sum(p_zsk, axis=1) / np.sum(p_zsk)
+                p_zk = np.sum(p_zsk, axis=0) / np.sum(p_zsk)
+                
                 new_zs = np.random.multinomial(1, p_zs).argmax()
                 new_zk = np.random.multinomial(1, p_zk).argmax()
+
+                # print("arg", np.argmax(p_s), np.argmax(p_k, axis=1),
+                #      np.argmax(p_k, axis=0),  np.argmax(p_zk))
+                # print('probs', p_s, p_zs)
+                # print('probk', p_k, p_zk)
+                # print('old', zs, zk)
+                # print('new', new_zs, new_zk)
 
                 # set z the new topic and increment counters
                 zs_j[j] = new_zs
@@ -122,15 +124,17 @@ class PAM:
                 self.n_zk[new_zk] += 1
 
     def hyper_parameter_inference(self):
-        mean_sk = np.average(self.n_m_zk / self.n_m_zs, axis=0)
-        var_sk = np.var(self.n_m_zk / self.n_m_zs, axis=0)
+        mean_denom = self.n_m_zs.reshape((len(self.docs), self.S, 1))
+        print(mean_denom)
+        mean_sk = np.average(self.n_m_zk / mean_denom, axis=0)
+        var_sk = np.var(self.n_m_zk / mean_denom, axis=0)
         m_sk = mean_sk * (mean_sk - 1) / var_sk - 1
         self.alphas = np.exp(np.sum(np.log(m_sk), axis=1) / (self.K - 1)) / 5
-        self.alphask = mean_sk / self.alphas
+        self.alphask = mean_sk / self.alphas.reshape(self.S, 1)
 
     def worddist(self):
         """get topic-word distribution"""
-        return self.n_zk_t / self.n_zk[:]
+        return self.n_zk_t / self.n_zk.reshape(20, 1)
 
     def perplexity(self, docs=None):
         if docs is None:
@@ -154,13 +158,13 @@ class PAM:
         return np.exp(log_per / N)
 
 
-def pam_learning(pam, iteration, voca, hp):
+def pam_learning(pam, iteration, voca, hpi):
     pre_perp = pam.perplexity()
     print("initial perplexity=%f" % pre_perp)
     for i in range(iteration):
         pam.inference()
         perp = pam.perplexity()
-        if hp:
+        if hpi:
             pam.hyper_parameter_inference()
         print("-%d p=%f" % (i + 1, perp))
         if pre_perp:
@@ -264,13 +268,13 @@ def main():
     print(options.S, options.K, options.alphas, options.beta)
     pam = PAM(options.S, options.K, options.alphas, options.beta,
               docs, voca.size(), options.smartinit)
-    print("corpus=%d, words=%d, K=%d, a=%f, b=%f"
-          % (len(corpus), len(voca.vocas), options.K,
-             options.alpha, options.beta))
+    print("corpus=%d, words=%d, S=%d, K=%d, a=%f, b=%f"
+          % (len(corpus), len(voca.vocas), options.S, options.K,
+             options.alphas, options.beta))
 
 # import cProfile
 # cProfile.runctx('lda_learning(lda, options.iteration, voca)', globals(),locals(), 'lda.profile')
-    pam_learning(pam, options.iteration, voca, options.hp)
+    pam_learning(pam, options.iteration, voca, options.hpi)
 
 
 if __name__ == "__main__":
