@@ -128,14 +128,14 @@ class PAM:
     def hyper_parameter_inference(self):
         mean_denom = (self.n_m_zs + self.alphas).reshape((len(self.docs),
                                                           self.S, 1))
-        mean_sk = np.mean((self.n_m_zk + self.alphask) / mean_denom + 1/len(self.docs), axis=0)
+        mean_sk = np.mean((self.n_m_zk + self.alphask) / mean_denom, axis=0)
         var_sk = np.var((self.n_m_zk + self.alphask) / mean_denom, axis=0)
         m_sk = (mean_sk * (1 - mean_sk) / var_sk) - 1
         self.alphas = np.exp(np.sum(np.log(m_sk), axis=1) / (self.K - 1)) / 5.0
         self.alphask = mean_sk * self.alphas.reshape(self.S, 1) \
                        / np.sum(mean_sk, axis=1).reshape(self.S, 1)
         if self.debug:
-            with open('alphas_mean_sum.out', 'a') as f:
+            with open('alphas_mean_sum_no_prior.out', 'a') as f:
                 print(np.sum(self.alphas), np.sum(mean_sk), file=f)
 
         print('mean_sk', mean_sk)

@@ -135,7 +135,7 @@ class PAM:
         self.alphask = mean_sk * self.alphas.reshape(self.S, 1) \
                        / np.sum(mean_sk, axis=1).reshape(self.S, 1)
         if self.debug:
-            with open('alphas_mean_sum.out', 'a') as f:
+            with open('alphas_mean_sum.out2', 'a') as f:
                 print(np.sum(self.alphas), np.sum(mean_sk), file=f)
 
         print('mean_sk', mean_sk)

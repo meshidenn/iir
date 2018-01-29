@@ -105,7 +105,7 @@ def lda_learning(lda, iteration, voca):
 def output_word_topic_dist(lda, voca):
     zcount = numpy.zeros(lda.K, dtype=int)
     wordcount = [dict() for k in range(lda.K)]
-    for xlist, zlist in zip(lda.docs, lda.z_m_i):
+    for xlist, zlist in zip(lda.docs, lda.z_m_j):
         for x, z in zip(xlist, zlist):
             zcount[z] += 1
             if x in wordcount[z]:
