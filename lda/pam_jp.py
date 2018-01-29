@@ -7,6 +7,7 @@
 # (c)2018 Hiroki Iida / Retrieva Inc.
 
 import numpy as np
+import os
 
 
 class PAM:
@@ -197,7 +198,7 @@ def output_super_sub_topic_dist(pam):
         print("super_topic-{}:{}".format(s+1, p_zsk))
 
 
-def output_word_topic_dist(pam, voca):
+def output_word_topic_dist(pam, voca, td):
     zkcount = np.zeros(pam.K, dtype=int)
     wordcount = [dict() for k in range(pam.K)]
     for xlist, zklist in zip(pam.docs, pam.zk_m_j):
@@ -215,11 +216,57 @@ def output_word_topic_dist(pam, voca):
             print("%s: %f (%d)" % (voca[w], phi[k, w], wordcount[k].get(w, 0)))
 
 
+def output_info(pam, voca, td):
+    try:
+        os.mkdir('./' + td)
+    except FileExistsError:
+        pass
+
+    zkcount = np.zeros(pam.K, dtype=int)
+    wordcount = [dict() for k in range(pam.K)]
+    for xlist, zklist in zip(pam.docs, pam.zk_m_j):
+        for x, zk in zip(xlist, zklist):
+            zkcount[zk] += 1
+            if x in wordcount[zk]:
+                wordcount[zk][x] += 1
+            else:
+                wordcount[zk][x] = 1
+
+    thetask = (pam.n_m_zk + pam.alphask) \
+              / (pam.n_m_zs + pam.alphas)
+    thetask = np.average(thetask, axis=0)
+    np.savetxt(td + 'thetask.csv', thetask, delimiter=',')
+
+    with open(td + 'doc2supertopic.csv', 'w', encoding='utf-8') as f:
+        for i in range(len(pam.docs)):
+            thetadsk = (pam.n_m_zk[i] + pam.alphask) \
+                       / (pam.n_m_zs[i] + pam.alphas)
+            thetads = np.average(thetadsk, axis=1)
+            print(','.join(map(str, list(thetads.flatten().tolist()))), file=f)
+
+    with open(td + 'doc2subtopic.csv', 'w', encoding='utf-8') as f:
+        for i in range(len(pam.docs)):
+            thetadsk = (pam.n_m_zk[i] + pam.alphask) \
+                       / (pam.n_m_zs[i] + pam.alphas)
+            thetadk = np.average(thetadsk, axis=0)
+            print(','.join(map(str, list(thetadk.flatten().tolist()))), file=f)
+
+    phi = pam.worddist()
+    with open(td + 'topic2words.txt', 'w', encoding='utf-8') as f:
+        for k in range(pam.K):
+            print(k, end='', file=f)
+            for w in np.argsort(-phi[k])[:20]:
+                print("%s, %f" % (voca[w], phi[k, w]), end='', file=f)
+
+            print('\n', file=f, end='')
+
+
 def main():
     import optparse
     import vocabulary
     parser = optparse.OptionParser()
     parser.add_option("-f", dest="filename", help="corpus filename")
+    parser.add_option("-o", dest="outdir", help="output directory")
     parser.add_option("-c", dest="corpus",
                       help="using range of Brown \
                       corpus' files(start:end)")
@@ -289,6 +336,7 @@ def main():
 # import cProfile
 # cProfile.runctx('lda_learning(lda, options.iteration, voca)', globals(),locals(), 'lda.profile')
     pam_learning(pam, options.iteration, voca, options.hpi)
+    output_info(pam, voca, options.outdir)
 
 
 if __name__ == "__main__":
