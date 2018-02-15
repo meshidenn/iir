@@ -1,0 +1,2 @@
+# pam
+pachinko allocation model
