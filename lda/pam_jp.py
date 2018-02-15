@@ -7,6 +7,7 @@
 # (c)2018 Hiroki Iida / Retrieva Inc.
 
 import numpy as np
+import json
 import os
 
 
@@ -54,10 +55,10 @@ class PAM:
                             / (np.sum(self.n_m_zs[m] + self.alphas) * self.n_zk)
 
                     p_zs = np.sum(p_zsk, axis=1) / np.sum(p_zsk)
-                    p_zk = np.sum(p_zsk, axis=0) / np.sum(p_zsk)
-
                     zs = np.random.multinomial(1, p_zs).argmax()
-                    zk = np.random.multinomial(1, p_zk).argmax()
+
+                    p_zk_s = p_zsk[zs, :] / np.sum(p_zsk[zs, :])
+                    zk = np.random.multinomial(1, p_zk_s).argmax()
 
                 else:
                     zs = np.random.randint(0, S)
@@ -106,10 +107,10 @@ class PAM:
                         / (np.sum(n_m_zs + self.alphas) * self.n_zk)
 
                 p_zs = np.sum(p_zsk, axis=1) / np.sum(p_zsk)
-                p_zk = np.sum(p_zsk, axis=0) / np.sum(p_zsk)
-
                 new_zs = np.random.multinomial(1, p_zs).argmax()
-                new_zk = np.random.multinomial(1, p_zk).argmax()
+
+                p_zk_s = p_zsk[new_zs, :] / np.sum(p_zsk[new_zs, :])
+                new_zk = np.random.multinomial(1, p_zk_s).argmax()
 
                 # print("arg", np.argmax(p_s), np.argmax(p_k, axis=1),
                 #      np.argmax(p_k, axis=0),  np.argmax(p_zk))
@@ -127,10 +128,9 @@ class PAM:
                 self.n_zk[new_zk] += 1
 
     def hyper_parameter_inference(self):
-        mean_denom = (self.n_m_zs + self.alphas).reshape((len(self.docs),
-                                                          self.S, 1))
-        mean_sk = np.mean((self.n_m_zk + self.alphask) / mean_denom + 1/len(self.docs), axis=0)
-        var_sk = np.var((self.n_m_zk + self.alphask) / mean_denom, axis=0)
+        mean_denom = (self.n_m_zs + 1).reshape((len(self.docs), self.S, 1))
+        mean_sk = np.mean(self.n_m_zk / mean_denom + 1 / len(self.docs), axis=0)
+        var_sk = np.mean(np.power(self.n_m_zk / mean_denom - mean_sk, 2), axis=0)
         m_sk = (mean_sk * (1 - mean_sk) / var_sk) - 1
         self.alphas = np.exp(np.sum(np.log(m_sk), axis=1) / (self.K - 1)) / 5.0
         self.alphask = mean_sk * self.alphas.reshape(self.S, 1) \
@@ -148,7 +148,7 @@ class PAM:
 
     def worddist(self):
         """get topic-word distribution"""
-        return self.n_zk_t / self.n_zk.reshape(20, 1)
+        return self.n_zk_t / self.n_zk.reshape(self.K, 1)
 
     def perplexity(self, docs=None):
         if docs is None:
@@ -172,15 +172,18 @@ class PAM:
         return np.exp(log_per / N)
 
 
-def pam_learning(pam, iteration, voca, hpi):
+def pam_learning(pam, iteration, voca, hpi, td):
     pre_perp = pam.perplexity()
-    print("initial perplexity=%f" % pre_perp)
+    with open(td + '/perplexity.txt', 'w', encoding='utf-8') as f:
+        print("initial perplexity=%f" % pre_perp, file=f)
     for i in range(iteration):
         pam.inference()
         perp = pam.perplexity()
         if hpi:
             pam.hyper_parameter_inference()
-        print("-%d p=%f" % (i + 1, perp))
+
+        with open(td + '/perplexity.txt', 'a', encoding='utf-8') as f:
+            print("-%d p=%f" % (i + 1, perp), file=f)
         output_super_sub_topic_dist(pam)
         if pre_perp:
             if pre_perp < perp:
@@ -198,7 +201,7 @@ def output_super_sub_topic_dist(pam):
         print("super_topic-{}:{}".format(s+1, p_zsk))
 
 
-def output_word_topic_dist(pam, voca, td):
+def output_word_topic_dist(pam, voca):
     zkcount = np.zeros(pam.K, dtype=int)
     wordcount = [dict() for k in range(pam.K)]
     for xlist, zklist in zip(pam.docs, pam.zk_m_j):
@@ -216,12 +219,7 @@ def output_word_topic_dist(pam, voca, td):
             print("%s: %f (%d)" % (voca[w], phi[k, w], wordcount[k].get(w, 0)))
 
 
-def output_info(pam, voca, td):
-    try:
-        os.mkdir('./' + td)
-    except FileExistsError:
-        pass
-
+def output_info(pam, voca, td, files):
     zkcount = np.zeros(pam.K, dtype=int)
     wordcount = [dict() for k in range(pam.K)]
     for xlist, zklist in zip(pam.docs, pam.zk_m_j):
@@ -232,33 +230,54 @@ def output_info(pam, voca, td):
             else:
                 wordcount[zk][x] = 1
 
-    thetask = (pam.n_m_zk + pam.alphask) \
-              / (pam.n_m_zs + pam.alphas)
-    thetask = np.average(thetask, axis=0)
-    np.savetxt(td + 'thetask.csv', thetask, delimiter=',')
+    nsk = np.sum(pam.n_m_zk, axis=0)
+    np.savetxt(td + '/nsk.csv', nsk, delimiter=',')
+    np.savetxt(td + '/alphask.csv', pam.alphask, delimiter=',')
+    phi = pam.worddist()
+    np.savetxt(td + '/phikv.csv', phi, delimiter=',')
 
-    with open(td + 'doc2supertopic.csv', 'w', encoding='utf-8') as f:
+    with open(td + '/doc2supertopic.csv', 'w', encoding='utf-8') as f:
         for i in range(len(pam.docs)):
-            thetadsk = (pam.n_m_zk[i] + pam.alphask) \
-                       / (pam.n_m_zs[i] + pam.alphas)
-            thetads = np.average(thetadsk, axis=1)
+            thetads = pam.n_m_zs[i] / np.sum(pam.n_m_zs[i])
             print(','.join(map(str, list(thetads.flatten().tolist()))), file=f)
 
-    with open(td + 'doc2subtopic.csv', 'w', encoding='utf-8') as f:
+    with open(td + '/doc2subtopic.csv', 'w', encoding='utf-8') as f:
         for i in range(len(pam.docs)):
-            thetadsk = (pam.n_m_zk[i] + pam.alphask) \
-                       / (pam.n_m_zs[i] + pam.alphas)
-            thetadk = np.average(thetadsk, axis=0)
+            thetadk = np.sum(pam.n_m_zk[i], axis=0) / np.sum(pam.n_m_zk[i])
             print(','.join(map(str, list(thetadk.flatten().tolist()))), file=f)
 
-    phi = pam.worddist()
-    with open(td + 'topic2words.txt', 'w', encoding='utf-8') as f:
+    with open(td + '/topic2words.txt', 'w', encoding='utf-8') as f:
         for k in range(pam.K):
-            print(k, end='', file=f)
+            print(k, end=',', file=f)
             for w in np.argsort(-phi[k])[:20]:
-                print("%s, %f" % (voca[w], phi[k, w]), end='', file=f)
+                print("%s" % voca[w], end=',', file=f)
 
             print('\n', file=f, end='')
+
+    with open(td + '/id2doc.csv', 'w', encoding='utf-8') as f:
+        for m in range(len(pam.docs)):
+            fname = files[m].split('/')[-1]
+            print('{},{}'.format(m, fname), file=f)
+
+    outdir = td + '/docs_topic'
+    try:
+        os.mkdir(outdir)
+
+    except FileExistsError:
+        pass
+
+    for m, doc in enumerate(pam.docs):
+        d_doc = []
+        for j, t in enumerate(doc):  # t is id of word
+            d = {voca.vocas[t]: (int(pam.zs_m_j[m][j]), int(pam.zk_m_j[m][j]))}
+#            jd = json.dumps(d, ensure_ascii=False)
+            d_doc.append(d)
+
+        fname = files[m].split('/')[-1].split('.')[0]
+        ofile = outdir + '/' + fname + '.json'
+        print(d_doc)
+        with open(ofile, 'w', encoding='utf-8') as f:
+            json.dump({'doc': d_doc}, f, ensure_ascii=False)
 
 
 def main():
@@ -311,9 +330,9 @@ def main():
         parser.error("need corpus filename(-f) or corpus range(-c)")
 
     if options.dirname and options.japanese:
-            corpus = vocabulary.load_file_ja(options.dirname)
+        corpus, files = vocabulary.load_file_ja(options.dirname)
     elif options.filename:
-            corpus = vocabulary.load_file(options.filename)
+        corpus = vocabulary.load_file(options.filename)
     else:
         corpus = vocabulary.load_corpus(options.corpus)
         if not corpus:
@@ -321,6 +340,7 @@ def main():
     if options.seed is not None:
         np.random.seed(options.seed)
 
+    np.random.seed(0)
     voca = vocabulary.Vocabulary(options.stopwords)
     # print(corpus)
     docs = [voca.doc_to_ids(doc) for doc in corpus]
@@ -335,8 +355,15 @@ def main():
 
 # import cProfile
 # cProfile.runctx('lda_learning(lda, options.iteration, voca)', globals(),locals(), 'lda.profile')
-    pam_learning(pam, options.iteration, voca, options.hpi)
-    output_info(pam, voca, options.outdir)
+    try:
+        print('mkdir: ' + options.outdir)
+        os.mkdir('./' + options.outdir)
+    except FileExistsError:
+        pass
+
+    td = './' + options.outdir
+    pam_learning(pam, options.iteration, voca, options.hpi, td)
+    output_info(pam, voca, td, files)
 
 
 if __name__ == "__main__":
